@@ -47,9 +47,9 @@ tokens expire after 15 minutes and can only be used once.
 ## Tools and technologies
 
 - **NestJS 11 and TypeScript** — API framework and application structure.
-- **PostgreSQL 16 in Docker** — the database runs as a PostgreSQL container on
-  the developer's machine using Docker Compose; the NestJS API connects to it
-  through the published `localhost:5432` port.
+- **PostgreSQL 16 and pgAdmin** — PostgreSQL is the database server running on
+  the developer's machine. pgAdmin is the graphical client used to connect to
+  and manage that server; it is not itself the database server.
 - **TypeORM** — persistence, entities, and versioned SQL migrations. Automatic
   schema synchronization is disabled.
 - **Passport and JWT** — authenticate API requests with bearer tokens.
@@ -68,9 +68,8 @@ tokens expire after 15 minutes and can only be used once.
 ### Requirements
 
 - Node.js 20 or newer and npm.
-- Docker Desktop (Windows/macOS) or Docker Engine with Docker Compose. The
-  database runs in Docker; a separate PostgreSQL server installation is not
-  required for the documented setup.
+- PostgreSQL 16 installed and running on the developer's machine.
+- pgAdmin, if you want a graphical tool to manage the PostgreSQL server.
 - An SMTP account if you want to test email delivery.
 
 ### Setup
@@ -83,24 +82,13 @@ tokens expire after 15 minutes and can only be used once.
 
 2. Copy `.env.example` to `.env`. Keep `.env` local and replace `JWT_SECRET`
    with a random secret of at least 32 characters.
-3. Start the PostgreSQL container on your machine:
-
-   ```sh
-   docker compose up -d db
-   ```
-
-   Compose downloads the `postgres:16` image if needed, starts the database,
-   publishes PostgreSQL on `localhost:5432`, and stores database files in the
-   persistent `task-postgres-data` Docker volume. Check that the container is
-   running with:
-
-   ```sh
-   docker compose ps
-   ```
-
-4. The API connects from your machine to the Docker container using the
-   `DATABASE_URL` in `.env` (the sample URL uses `localhost:5432`). Apply the
-   database migrations:
+3. Make sure your local PostgreSQL server is running. In pgAdmin, connect to
+   that server and create a database named `tasks` if it does not already
+   exist. pgAdmin is only the management client; the PostgreSQL server service
+   must be running independently.
+4. Set `DATABASE_URL` in `.env` to your local PostgreSQL connection details.
+   Replace the username and password in the example with the values configured
+   for your PostgreSQL server. Apply the database migrations:
 
    ```sh
    npm run migration:run
@@ -116,20 +104,25 @@ The API listens on `http://localhost:3000` by default. Open
 `http://localhost:3000/docs` for Swagger or `http://localhost:3000/health` for
 the health endpoint. The API root (`/`) does not have a route.
 
+Docker Compose configuration is also included as an optional alternative for
+running PostgreSQL in a container. It is not needed when using the PostgreSQL
+server installed on your system. Avoid starting both local and containerized
+PostgreSQL on port `5432` at the same time unless you change one server's port.
+
 ## Environment configuration
 
-| Variable             | Required                 | Purpose                                                                                        |
-| -------------------- | ------------------------ | ---------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`       | Yes                      | PostgreSQL connection string. The example connects to the Docker database at `localhost:5432`. |
-| `JWT_SECRET`         | Yes                      | Secret used to sign access tokens; at least 32 characters.                                     |
-| `PORT`               | No                       | API port; defaults to `3000`.                                                                  |
-| `CORS_ORIGIN`        | No                       | Comma-separated browser origins allowed by CORS.                                               |
-| `SMTP_HOST`          | For password-reset email | SMTP server hostname.                                                                          |
-| `SMTP_PORT`          | No                       | SMTP port; defaults to `587`; port `465` enables secure SMTP.                                  |
-| `SMTP_USER`          | Provider-dependent       | SMTP username; configure together with `SMTP_PASSWORD`.                                        |
-| `SMTP_PASSWORD`      | Provider-dependent       | SMTP password; configure together with `SMTP_USER`.                                            |
-| `MAIL_FROM`          | With `SMTP_HOST`         | Valid sender email address supplied by the email provider.                                     |
-| `PASSWORD_RESET_URL` | With `SMTP_HOST`         | Frontend reset-password page; the API adds the token query parameter.                          |
+| Variable             | Required                 | Purpose                                                                                                                     |
+| -------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`       | Yes                      | PostgreSQL connection string for your local server, usually at `localhost:5432`; use your PostgreSQL username and password. |
+| `JWT_SECRET`         | Yes                      | Secret used to sign access tokens; at least 32 characters.                                                                  |
+| `PORT`               | No                       | API port; defaults to `3000`.                                                                                               |
+| `CORS_ORIGIN`        | No                       | Comma-separated browser origins allowed by CORS.                                                                            |
+| `SMTP_HOST`          | For password-reset email | SMTP server hostname.                                                                                                       |
+| `SMTP_PORT`          | No                       | SMTP port; defaults to `587`; port `465` enables secure SMTP.                                                               |
+| `SMTP_USER`          | Provider-dependent       | SMTP username; configure together with `SMTP_PASSWORD`.                                                                     |
+| `SMTP_PASSWORD`      | Provider-dependent       | SMTP password; configure together with `SMTP_USER`.                                                                         |
+| `MAIL_FROM`          | With `SMTP_HOST`         | Valid sender email address supplied by the email provider.                                                                  |
+| `PASSWORD_RESET_URL` | With `SMTP_HOST`         | Frontend reset-password page; the API adds the token query parameter.                                                       |
 
 The SMTP values in `.env.example` are examples/placeholders, not working
 credentials. A sandbox provider such as Mailtrap is suitable for development.
