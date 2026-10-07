@@ -27,6 +27,7 @@ export class Project {
 
   @Column({ type: 'text', nullable: true })
   @ApiPropertyOptional({
+    type: String,
     example: 'Plan and track the redesign',
     nullable: true,
   })

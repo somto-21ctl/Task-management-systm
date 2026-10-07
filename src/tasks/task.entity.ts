@@ -31,6 +31,7 @@ export class Task {
 
   @Column({ type: 'text', nullable: true })
   @ApiPropertyOptional({
+    type: String,
     example: 'Collect feedback from the team',
     nullable: true,
   })
@@ -47,6 +48,7 @@ export class Task {
 
   @Column({ type: 'date', nullable: true })
   @ApiPropertyOptional({
+    type: String,
     example: '2026-12-31',
     format: 'date',
     nullable: true,

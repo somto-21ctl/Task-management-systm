@@ -25,6 +25,7 @@ export class MailerService {
       host,
       port,
       secure: port === 465,
+      requireTLS: port === 587,
       ...(user && pass ? { auth: { user, pass } } : {}),
     });
   }
