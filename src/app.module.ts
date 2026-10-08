@@ -5,6 +5,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import * as Joi from 'joi';
 import { AuthModule } from './auth/auth.module';
+import { AdminModule } from './admin/admin.module';
 import { ProjectsModule } from './projects/projects.module';
 import { TasksModule } from './tasks/tasks.module';
 import { AppController } from './app.controller';
@@ -46,6 +47,7 @@ import { AppController } from './app.controller';
       }),
     }),
     AuthModule,
+    AdminModule,
     ProjectsModule,
     TasksModule,
   ],

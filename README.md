@@ -18,8 +18,8 @@ documented service with database migrations and a password-recovery flow:
 1. **API foundation** — NestJS application structure, configuration validation,
    PostgreSQL connection, health endpoint, and shared request validation.
 2. **Accounts and access control** — account registration, password hashing,
-   JWT login, authenticated profile access, and user-scoped project/task
-   operations.
+   JWT login, authenticated profile access, user-scoped project/task
+   operations, and role-protected admin access.
 3. **Project and task management** — CRUD endpoints for projects and tasks,
    task filtering/pagination, and ownership enforced by the API.
 4. **Database and API documentation** — TypeORM entities and migrations,
@@ -33,6 +33,7 @@ documented service with database migrations and a password-recovery flow:
 | ----------------- | ------------------------------------------------------------------------------------ |
 | Health            | `GET /health`                                                                        |
 | Accounts          | `POST /auth/register`, `POST /auth/login`, authenticated `GET /auth/me`              |
+| Administration    | Admin-only, paginated `GET /admin/users`; roles are `user` and `admin`               |
 | Password recovery | `POST /auth/forgot-password` and `POST /auth/reset-password`                         |
 | Projects          | Authenticated create, list, view, update, and delete at `/projects`                  |
 | Tasks             | Authenticated create, list, view, update, and delete at `/projects/:projectId/tasks` |
@@ -43,6 +44,9 @@ Project and task access is scoped to the authenticated account. Request DTOs
 are validated globally; unknown fields are rejected. Password-reset requests
 use an enumeration-resistant response for unknown email addresses, and reset
 tokens expire after 15 minutes and can only be used once.
+Public registration always creates a `user`; admin routes require both a valid
+JWT and the `admin` role. The admin user-list response is paginated and excludes
+password hashes.
 
 ## Tools and technologies
 
@@ -94,7 +98,18 @@ tokens expire after 15 minutes and can only be used once.
    npm run migration:run
    ```
 
-5. Start the API in watch mode:
+5. Register the account that should be the first administrator, then promote
+   that account with the private CLI command:
+
+   ```sh
+   npm run admin:promote -- --email=admin@example.com
+   ```
+
+   The command updates an existing account only; it does not create an account
+   or expose role changes through the public API. Log in again after promotion
+   to receive a JWT containing the new role.
+
+6. Start the API in watch mode:
 
    ```sh
    npm run start:dev
@@ -163,8 +178,8 @@ will then include it when calling protected project and task endpoints.
 ## Database migrations
 
 The database schema is managed by TypeORM migrations; do not turn on
-`synchronize`. The repository currently contains an initial schema migration
-and a migration for password-reset tokens.
+`synchronize`. The repository contains an initial schema migration, a password-reset-token
+migration, and a migration constraining user roles to `user` or `admin`.
 
 Generate a migration after changing database entities:
 
@@ -203,9 +218,10 @@ database and apply migrations before running them.
   production-specific CORS settings.
 - **Access tokens expire after 15 minutes.** Refresh tokens and a token
   revocation/session-management flow are not currently implemented.
-- **Account roles are represented in user data and JWTs, but a role-based
-  permissions system is not implemented.** Project/task authorization is
-  currently based on ownership.
+- **Admin capabilities are intentionally limited.** Administrators can view a
+  paginated list of accounts, while project/task data remains scoped to its
+  owner. Additional administrative actions should be added as explicit
+  admin-only endpoints.
 - **Email delivery is tested through a mocked mailer in unit tests.** Real
   SMTP delivery and provider-specific behavior must be verified with the
   chosen provider.

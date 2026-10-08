@@ -8,8 +8,7 @@ import {
 } from 'typeorm';
 import { ApiHideProperty, ApiProperty } from '@nestjs/swagger';
 import { Project } from '../projects/project.entity';
-
-export type UserRole = 'admin' | 'user';
+import { UserRole } from './user-role.enum';
 
 @Entity('users')
 export class User {
@@ -25,8 +24,8 @@ export class User {
   @ApiHideProperty()
   passwordHash: string;
 
-  @Column({ type: 'varchar', length: 16, default: 'user' })
-  @ApiProperty({ enum: ['admin', 'user'], example: 'user' })
+  @Column({ type: 'varchar', length: 16, default: UserRole.USER })
+  @ApiProperty({ enum: UserRole, example: UserRole.USER })
   role: UserRole;
 
   @OneToMany(() => Project, (project) => project.owner)
