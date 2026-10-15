@@ -17,6 +17,7 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { ApiErrorResponses } from '../common/decorators/api-error-responses.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { JwtUser } from '../common/interfaces/jwt-user.interface';
 import { CreateProjectDto } from './dto/create-project.dto';
@@ -38,6 +39,13 @@ export class ProjectsController {
     type: Project,
     isArray: true,
   })
+  @ApiErrorResponses(
+    {
+      status: 401,
+      description: 'Bearer token is missing, invalid, or expired.',
+    },
+    { status: 500, description: 'Unexpected server error.' },
+  )
   findAll(@CurrentUser() user: JwtUser) {
     return this.projects.findAllOwned(user.userId);
   }
@@ -48,6 +56,17 @@ export class ProjectsController {
     description: 'The project was created.',
     type: Project,
   })
+  @ApiErrorResponses(
+    {
+      status: 400,
+      description: 'Project name or description failed validation.',
+    },
+    {
+      status: 401,
+      description: 'Bearer token is missing, invalid, or expired.',
+    },
+    { status: 500, description: 'Unexpected server error.' },
+  )
   create(@CurrentUser() user: JwtUser, @Body() dto: CreateProjectDto) {
     return this.projects.create(user.userId, dto);
   }
@@ -55,6 +74,15 @@ export class ProjectsController {
   @Get(':projectId')
   @ApiOperation({ summary: 'Get a project' })
   @ApiOkResponse({ description: 'The requested project.', type: Project })
+  @ApiErrorResponses(
+    { status: 400, description: 'projectId is not a valid UUID.' },
+    {
+      status: 401,
+      description: 'Bearer token is missing, invalid, or expired.',
+    },
+    { status: 404, description: 'The project does not exist or is not yours.' },
+    { status: 500, description: 'Unexpected server error.' },
+  )
   findOne(
     @CurrentUser() user: JwtUser,
     @Param('projectId', ParseUUIDPipe) projectId: string,
@@ -65,6 +93,19 @@ export class ProjectsController {
   @Patch(':projectId')
   @ApiOperation({ summary: 'Update a project' })
   @ApiOkResponse({ description: 'The updated project.', type: Project })
+  @ApiErrorResponses(
+    {
+      status: 400,
+      description:
+        'projectId or one of the supplied project fields is invalid.',
+    },
+    {
+      status: 401,
+      description: 'Bearer token is missing, invalid, or expired.',
+    },
+    { status: 404, description: 'The project does not exist or is not yours.' },
+    { status: 500, description: 'Unexpected server error.' },
+  )
   update(
     @CurrentUser() user: JwtUser,
     @Param('projectId', ParseUUIDPipe) projectId: string,
@@ -75,7 +116,16 @@ export class ProjectsController {
 
   @Delete(':projectId')
   @ApiOperation({ summary: 'Delete a project and its tasks' })
-  @ApiOkResponse({ description: 'The project was deleted.' })
+  @ApiOkResponse({ description: 'The project and its tasks were deleted.' })
+  @ApiErrorResponses(
+    { status: 400, description: 'projectId is not a valid UUID.' },
+    {
+      status: 401,
+      description: 'Bearer token is missing, invalid, or expired.',
+    },
+    { status: 404, description: 'The project does not exist or is not yours.' },
+    { status: 500, description: 'Unexpected server error.' },
+  )
   remove(
     @CurrentUser() user: JwtUser,
     @Param('projectId', ParseUUIDPipe) projectId: string,

@@ -24,7 +24,10 @@ export class ListTasksDto {
   @Max(100)
   limit = 20;
 
-  @ApiPropertyOptional({ enum: TaskStatus })
+  @ApiPropertyOptional({
+    enum: TaskStatus,
+    description: 'Filter by pending, inProgress, or done.',
+  })
   @IsOptional()
   @IsEnum(TaskStatus)
   status?: TaskStatus;

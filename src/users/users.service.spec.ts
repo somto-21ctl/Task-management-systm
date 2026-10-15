@@ -20,11 +20,18 @@ describe('UsersService', () => {
   it('creates public registrations with the user role', async () => {
     users.save.mockResolvedValue({ email: 'alex@example.com' });
 
-    await service.create('alex@example.com', 'hashed-password');
+    await service.create(
+      'alex@example.com',
+      'hashed-password',
+      'Alex Morgan',
+      '+14155552671',
+    );
 
     expect(users.create).toHaveBeenCalledWith({
       email: 'alex@example.com',
       passwordHash: 'hashed-password',
+      fullName: 'Alex Morgan',
+      phoneNumber: '+14155552671',
       role: UserRole.USER,
     });
   });
@@ -36,7 +43,14 @@ describe('UsersService', () => {
     await service.findPage(query);
 
     expect(users.findAndCount).toHaveBeenCalledWith({
-      select: { id: true, email: true, role: true, createdAt: true },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        phoneNumber: true,
+        role: true,
+        createdAt: true,
+      },
       skip: 10,
       take: 10,
       order: { createdAt: 'DESC', id: 'ASC' },

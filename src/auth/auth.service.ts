@@ -4,11 +4,12 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { compare, hash } from 'bcryptjs';
-import { createHash, randomBytes } from 'node:crypto';
-import { DataSource, Repository } from 'typeorm';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { DataSource, MoreThan, Repository } from 'typeorm';
 import type { JwtUser } from '../common/interfaces/jwt-user.interface';
 import { UsersService } from '../users/users.service';
 import { User } from '../users/user.entity';
@@ -18,18 +19,32 @@ import { RegisterDto } from './dto/register.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { MailerService } from './mailer.service';
 import { PasswordResetToken } from './password-reset-token.entity';
+import { RefreshToken } from './refresh-token.entity';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 
 const PASSWORD_RESET_TOKEN_TTL_MINUTES = 15;
+const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
+const SESSION_IDLE_TTL_SECONDS = 60 * 60;
+const REFRESH_TOKEN_MAX_TTL_SECONDS = 30 * 24 * 60 * 60;
 const PASSWORD_RESET_MESSAGE =
   'If an account exists for that email, a password reset link will be sent.';
+
+interface RefreshTokenPayload extends JwtUser {
+  jti: string;
+  sessionId: string;
+  tokenType: 'refresh';
+}
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly users: UsersService,
     private readonly jwt: JwtService,
+    private readonly config: ConfigService,
     @InjectRepository(PasswordResetToken)
     private readonly resetTokens: Repository<PasswordResetToken>,
+    @InjectRepository(RefreshToken)
+    private readonly refreshTokens: Repository<RefreshToken>,
     private readonly dataSource: DataSource,
     private readonly mailer: MailerService,
   ) {}
@@ -40,10 +55,17 @@ export class AuthService {
       throw new ConflictException('An account with this email already exists');
     }
 
-    const user = await this.users.create(email, await hash(dto.password, 12));
+    const user = await this.users.create(
+      email,
+      await hash(dto.password, 12),
+      dto.fullName.trim(),
+      dto.phoneNumber.trim(),
+    );
     return {
       id: user.id,
       email: user.email,
+      fullName: user.fullName,
+      phoneNumber: user.phoneNumber,
       role: user.role,
       createdAt: user.createdAt,
     };
@@ -60,7 +82,91 @@ export class AuthService {
       email: user.email,
       role: user.role,
     };
-    return { accessToken: await this.jwt.signAsync(payload) };
+    const tokenPair = await this.createTokenPair(payload, randomUUID());
+    await this.refreshTokens.save(
+      this.refreshTokens.create(tokenPair.refreshTokenRecord),
+    );
+    return tokenPair.response;
+  }
+
+  async refresh(dto: RefreshTokenDto) {
+    let payload: RefreshTokenPayload;
+    try {
+      payload = await this.jwt.verifyAsync<RefreshTokenPayload>(
+        dto.refreshToken,
+        { secret: this.refreshTokenSecret },
+      );
+    } catch {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    if (payload.tokenType !== 'refresh' || !payload.jti || !payload.sessionId) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    return this.dataSource.transaction(async (manager) => {
+      const existingToken = await manager.findOne(RefreshToken, {
+        where: { tokenHash: this.hashToken(dto.refreshToken) },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (
+        !existingToken ||
+        existingToken.tokenId !== payload.jti ||
+        existingToken.sessionId !== payload.sessionId ||
+        existingToken.expiresAt <= new Date()
+      ) {
+        throw new UnauthorizedException('Invalid or expired refresh token');
+      }
+
+      await manager.delete(RefreshToken, { id: existingToken.id });
+      const tokenPair = await this.createTokenPair(
+        {
+          userId: payload.userId,
+          email: payload.email,
+          role: payload.role,
+        },
+        existingToken.sessionId,
+      );
+      await manager.save(
+        RefreshToken,
+        this.refreshTokens.create(tokenPair.refreshTokenRecord),
+      );
+      return tokenPair.response;
+    });
+  }
+
+  async logout(dto: RefreshTokenDto) {
+    const token = await this.refreshTokens.findOne({
+      where: { tokenHash: this.hashToken(dto.refreshToken) },
+    });
+    if (token) {
+      await this.refreshTokens.delete({ sessionId: token.sessionId });
+    }
+    return { message: 'Logged out successfully.' };
+  }
+
+  async touchSession(user: JwtUser): Promise<void> {
+    if (!user.sessionId) {
+      throw new UnauthorizedException(
+        'Session has expired; please log in again',
+      );
+    }
+
+    const result = await this.refreshTokens.update(
+      {
+        sessionId: user.sessionId,
+        userId: user.userId,
+        expiresAt: MoreThan(new Date()),
+      },
+      {
+        expiresAt: new Date(Date.now() + SESSION_IDLE_TTL_SECONDS * 1000),
+      },
+    );
+    if (!result.affected) {
+      throw new UnauthorizedException(
+        'Session has expired; please log in again',
+      );
+    }
   }
 
   async getProfile(userId: string) {
@@ -69,6 +175,8 @@ export class AuthService {
     return {
       id: user.id,
       email: user.email,
+      fullName: user.fullName,
+      phoneNumber: user.phoneNumber,
       role: user.role,
       createdAt: user.createdAt,
     };
@@ -118,8 +226,47 @@ export class AuthService {
 
       await manager.update(User, { id: resetToken.userId }, { passwordHash });
       await manager.delete(PasswordResetToken, { userId: resetToken.userId });
+      await manager.delete(RefreshToken, { userId: resetToken.userId });
     });
 
     return { message: 'Password has been reset successfully.' };
+  }
+
+  private async createTokenPair(user: JwtUser, sessionId: string) {
+    const accessToken = await this.jwt.signAsync({ ...user, sessionId });
+    const tokenId = randomUUID();
+    const refreshToken = await this.jwt.signAsync(
+      { ...user, jti: tokenId, sessionId, tokenType: 'refresh' },
+      {
+        secret: this.refreshTokenSecret,
+        expiresIn: REFRESH_TOKEN_MAX_TTL_SECONDS,
+      },
+    );
+    const expiresAt = new Date(Date.now() + SESSION_IDLE_TTL_SECONDS * 1000);
+
+    return {
+      response: {
+        accessToken,
+        refreshToken,
+        tokenType: 'Bearer' as const,
+        expiresIn: ACCESS_TOKEN_TTL_SECONDS,
+        sessionIdleTimeoutSeconds: SESSION_IDLE_TTL_SECONDS,
+      },
+      refreshTokenRecord: {
+        userId: user.userId,
+        tokenId,
+        sessionId,
+        tokenHash: this.hashToken(refreshToken),
+        expiresAt,
+      },
+    };
+  }
+
+  private get refreshTokenSecret(): string {
+    return this.config.getOrThrow<string>('JWT_REFRESH_SECRET');
+  }
+
+  private hashToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
   }
 }

@@ -19,6 +19,7 @@ import { AppController } from './app.controller';
           .uri({ scheme: ['postgres', 'postgresql'] })
           .required(),
         JWT_SECRET: Joi.string().min(32).required(),
+        JWT_REFRESH_SECRET: Joi.string().min(32).required(),
         PORT: Joi.number().port().default(3000),
         CORS_ORIGIN: Joi.string().optional(),
         SMTP_HOST: Joi.string().hostname().optional(),

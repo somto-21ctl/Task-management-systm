@@ -6,6 +6,7 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { ApiErrorResponses } from '../common/decorators/api-error-responses.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { UserRole } from '../users/user-role.enum';
@@ -27,6 +28,18 @@ export class AdminController {
     description: 'A page of user accounts without password data.',
     type: AdminUserPageResponseDto,
   })
+  @ApiErrorResponses(
+    { status: 400, description: 'Pagination values failed validation.' },
+    {
+      status: 401,
+      description: 'Bearer token is missing, invalid, or expired.',
+    },
+    {
+      status: 403,
+      description: 'The authenticated user is not an administrator.',
+    },
+    { status: 500, description: 'Unexpected server error.' },
+  )
   findUsers(@Query() query: ListUsersDto) {
     return this.users.findPage(query);
   }

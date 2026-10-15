@@ -20,6 +20,18 @@ export class User {
   @ApiProperty({ example: 'alex@example.com', format: 'email' })
   email: string;
 
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  @ApiProperty({ example: 'Alex Morgan', nullable: true })
+  fullName: string | null;
+
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  @ApiProperty({
+    example: '+14155552671',
+    nullable: true,
+    description: 'E.164 international phone number.',
+  })
+  phoneNumber: string | null;
+
   @Column({ select: false })
   @ApiHideProperty()
   passwordHash: string;

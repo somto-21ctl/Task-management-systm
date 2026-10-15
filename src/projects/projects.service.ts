@@ -8,7 +8,9 @@ import { Project } from './project.entity';
 
 @Injectable()
 export class ProjectsService {
-  constructor(@InjectRepository(Project) private readonly projects: Repository<Project>) {}
+  constructor(
+    @InjectRepository(Project) private readonly projects: Repository<Project>,
+  ) {}
 
   findAllOwned(userId: string) {
     return this.projects.find({
@@ -20,6 +22,15 @@ export class ProjectsService {
   async findOneOwned(userId: string, projectId: string) {
     const project = await this.projects.findOne({
       where: { id: projectId, owner: { id: userId } },
+    });
+    if (!project) throw new NotFoundException('Project not found');
+    return project;
+  }
+
+  async findOneById(projectId: string) {
+    const project = await this.projects.findOne({
+      where: { id: projectId },
+      relations: { owner: true },
     });
     if (!project) throw new NotFoundException('Project not found');
     return project;

@@ -29,24 +29,49 @@ documented service with database migrations and a password-recovery flow:
 
 ## Current functionality
 
-| Area              | What is available                                                                    |
-| ----------------- | ------------------------------------------------------------------------------------ |
-| Health            | `GET /health`                                                                        |
-| Accounts          | `POST /auth/register`, `POST /auth/login`, authenticated `GET /auth/me`              |
-| Administration    | Admin-only, paginated `GET /admin/users`; roles are `user` and `admin`               |
-| Password recovery | `POST /auth/forgot-password` and `POST /auth/reset-password`                         |
-| Projects          | Authenticated create, list, view, update, and delete at `/projects`                  |
-| Tasks             | Authenticated create, list, view, update, and delete at `/projects/:projectId/tasks` |
-| Task listing      | Pagination, status filtering, and due-date sorting                                   |
-| API documentation | Swagger UI at `http://localhost:3000/docs`                                           |
+| Area              | What is available                                                                                                  |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Health            | `GET /health`                                                                                                      |
+| Accounts          | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, authenticated `GET /auth/me` |
+| Administration    | Admin-only, paginated `GET /admin/users`; roles are `user` and `admin`                                             |
+| Password recovery | `POST /auth/forgot-password` and `POST /auth/reset-password`                                                       |
+| Projects          | Authenticated create, list, view, update, and delete at `/projects`                                                |
+| Tasks             | Authenticated create, list, view, update, and delete at `/projects/:projectId/tasks`                               |
+| Task assignment   | Project owners assign tasks to individual user UIDs; assignees update their own status                             |
+| Task review       | Project owners approve completed tasks or request changes with feedback                                            |
+| Task listing      | Pagination, `pending` / `inProgress` / `done` status filtering, and due-date sorting                               |
+| API documentation | Swagger UI at `http://localhost:3000/docs`                                                                         |
 
-Project and task access is scoped to the authenticated account. Request DTOs
-are validated globally; unknown fields are rejected. Password-reset requests
-use an enumeration-resistant response for unknown email addresses, and reset
-tokens expire after 15 minutes and can only be used once.
+Project and task access is scoped to the authenticated account. Request DTOs are validated globally; unknown fields are rejected. Registration
+requires `email`, `password`, `fullName`, and `phoneNumber` (E.164 format).
+Passwords must contain at least 17 and at most 72 printable ASCII characters,
+including an uppercase letter, lowercase letter, number, and symbol. Full names
+accept letters with spaces, apostrophes, and hyphens; values are trimmed.
+Login returns a 15-minute `accessToken` and a `refreshToken`. Refresh tokens
+are stored only as hashes and rotate at `POST /auth/refresh`. Each authenticated
+API request extends the server-side session timeout by one hour. The frontend
+should call the refresh endpoint before `accessToken` expires while the user is
+active; if there is no authenticated API activity for one hour, the session
+expires and the user must log in again. `POST /auth/logout` revokes the session
+immediately, including its access token. Resetting a password also revokes all
+refresh-token sessions for that account. Password-reset requests use an
+enumeration-resistant response for unknown email addresses, and reset tokens
+expire after 15 minutes and can only be used once.
+Profile fields added after the initial release may be `null` for older accounts;
+newly registered accounts always include both profile fields.
 Public registration always creates a `user`; admin routes require both a valid
 JWT and the `admin` role. The admin user-list response is paginated and excludes
 password hashes.
+
+For task assignment, project owners act as project managers. They can list
+users through
+`GET /projects/:projectId/tasks/assignees?page=1&limit=20`, create tasks with
+an `assignedToUserId` UUID, and see all project tasks. Assignees see only tasks
+assigned to them and can update only `status`. New tasks start as `pending`;
+valid statuses are `pending`, `inProgress`, and `done`. A project owner reviews
+completed tasks with `PATCH /projects/:projectId/tasks/:taskId/review` using
+`reviewStatus: "approved"` or `"changesRequested"` and optional
+`managerFeedback`. A changes request returns the task to `inProgress`.
 
 ## Tools and technologies
 
@@ -85,7 +110,8 @@ password hashes.
    ```
 
 2. Copy `.env.example` to `.env`. Keep `.env` local and replace `JWT_SECRET`
-   with a random secret of at least 32 characters.
+   and `JWT_REFRESH_SECRET` with different random secrets of at least 32
+   characters each.
 3. Make sure your local PostgreSQL server is running. In pgAdmin, connect to
    that server and create a database named `tasks` if it does not already
    exist. pgAdmin is only the management client; the PostgreSQL server service
@@ -107,7 +133,7 @@ password hashes.
 
    The command updates an existing account only; it does not create an account
    or expose role changes through the public API. Log in again after promotion
-   to receive a JWT containing the new role.
+   to receive tokens containing the new role.
 
 6. Start the API in watch mode:
 

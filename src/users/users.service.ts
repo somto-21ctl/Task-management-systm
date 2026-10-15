@@ -22,9 +22,37 @@ export class UsersService {
     return this.users.findOneBy({ id });
   }
 
-  create(email: string, passwordHash: string) {
+  findAssignableUser(id: string) {
+    return this.users.findOne({
+      where: { id },
+      select: { id: true, email: true, fullName: true },
+    });
+  }
+
+  async findAssignableUsers(page: number, limit: number) {
+    const [items, total] = await this.users.findAndCount({
+      select: { id: true, email: true, fullName: true },
+      skip: (page - 1) * limit,
+      take: limit,
+      order: { email: 'ASC', id: 'ASC' },
+    });
+    return { items, total, page, limit };
+  }
+
+  create(
+    email: string,
+    passwordHash: string,
+    fullName: string,
+    phoneNumber: string,
+  ) {
     return this.users.save(
-      this.users.create({ email, passwordHash, role: UserRole.USER }),
+      this.users.create({
+        email,
+        passwordHash,
+        fullName,
+        phoneNumber,
+        role: UserRole.USER,
+      }),
     );
   }
 
@@ -33,6 +61,8 @@ export class UsersService {
       select: {
         id: true,
         email: true,
+        fullName: true,
+        phoneNumber: true,
         role: true,
         createdAt: true,
       },
